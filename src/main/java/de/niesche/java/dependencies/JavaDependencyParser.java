@@ -76,9 +76,9 @@ class FileWalker implements Iterator<File> {
 public class JavaDependencyParser {
 	
 	private interface IHandler {
-		void start();
+		void start(String project);
 		void handleFile(String fn, CompilationUnit cu, boolean hasNext);
-		void end();
+		void end(String project);
 	}
 	
 	private static class PrinterSimple implements IHandler {
@@ -86,9 +86,9 @@ public class JavaDependencyParser {
 			_out = out;
 		}
 		@Override
-		public void start() { }
+		public void start(String project) { }
 		@Override
-		public void end() { }
+		public void end(String project) { }
 		
 		@Override
 		public void handleFile(String fn, CompilationUnit unit, boolean hasNext) {
@@ -108,8 +108,10 @@ public class JavaDependencyParser {
 		PrinterJson(PrintStream out) {
 			_out = out;
 		}
-		public void start() {
-			_out.println("{ \"files\": [");
+		public void start(String project) {
+			_out.println("{");
+			_out.println("  \"project\": \""+project+"\"");
+			_out.println("  \"files\": [");
 		}
 		public void handleFile(String fn, CompilationUnit unit, boolean hasNext) {
 			_out.println("{");
@@ -149,7 +151,7 @@ public class JavaDependencyParser {
 
 			_out.println("}"+(hasNext?",":""));
 		}
-		public void end() {
+		public void end(String project) {
 			_out.println("]}");
 		}
 		PrintStream _out;
@@ -174,15 +176,17 @@ public class JavaDependencyParser {
 	}
 	
 	private static class CycleFinder implements IHandler {
-		public CycleFinder() {
+		public CycleFinder(boolean csv) {
 			//_files = new ArrayList<>();
 			_types = new HashMap<>();
 			_wildCardsFound = false;
+			_csv = csv;
 		}
 		
 		@Override
-		public void start() {
-			
+		public void start(String project) {
+			_types = new HashMap<>();
+			_wildCardsFound = false;
 		}
 		@Override
 		public void handleFile(String fn, CompilationUnit cu, boolean hasNext) {
@@ -213,24 +217,71 @@ public class JavaDependencyParser {
 
 		}
 		@Override
-		public void end() {
+		public void end(String project) {
 			findCycles();
 			int maxCycle = _cycles.stream().mapToInt(List::size).reduce(0, Integer::max);
 			int numInCycle = _cycles.stream().mapToInt(List::size).reduce(0, Integer::sum);
-			
-			System.out.println("found "+numInCycle+" types in "+_cycles.size()+" strongly connected components (largest is "+maxCycle+") after looking at "+_types.size()+" types");
-			
-			for (List<TypeEntry> list : _cycles) {
-				System.out.println("[");
-				for (TypeEntry typeEntry : list) {
-					System.out.println("  "+typeEntry.name);
+			int numCycles = _cycles.size();
+
+			String json = cyclesAsJson();
+			if (_csv) {
+				json = json.replaceAll("\"", "\\\"");
+				System.out.println(project+","+numCycles+","+numInCycle+","+maxCycle+","+_wildCardsFound+",\""+json+"\"");
+			} else {
+				System.out.println(project+": found "+numInCycle+" types in "+numCycles+" strongly connected components (largest is "+maxCycle+") after looking at "+_types.size()+" types");
+				System.out.println(json);
+				if (_wildCardsFound) {
+					System.out.println("Note: Found wildcard imports, result is a lower bound.");
 				}
-				System.out.println("]");
 			}
 			
-			if (_wildCardsFound) {
-				System.out.println("Note: Found wildcard imports, result is a lower bound.");
+
+			
+		}
+		
+		String cyclesAsJson() {
+			StringBuilder result = new StringBuilder();
+			String linesep = "";
+			String indent = "";
+			if (!_csv) {
+				linesep = System.lineSeparator();
+				indent = "  ";
 			}
+			
+			result.append("[");
+			result.append(linesep);
+			boolean firstCycle = true;
+			for (List<TypeEntry> list : _cycles) {
+				result.append(linesep);
+				result.append(indent);
+				if (firstCycle) {
+					firstCycle = !firstCycle;
+				} else {
+					result.append(',');
+				}
+				result.append("[");
+				boolean firstEntry = true;
+				for (TypeEntry typeEntry : list) {
+					result.append(linesep);
+					result.append(indent);
+					result.append(indent);
+					if (firstEntry) {
+						firstEntry = !firstEntry;
+					} else {
+						result.append(',');
+					}
+					result.append('"');
+					result.append(typeEntry.name);
+					result.append('"');
+				}
+				result.append(linesep);
+				result.append(indent);
+				result.append("]");
+			}
+			result.append(linesep);
+			result.append("]");
+			
+			return result.toString();
 		}
 		
 		void findCycles() {
@@ -283,6 +334,7 @@ public class JavaDependencyParser {
 			return e.lowestReachable;
 		}
 		
+		boolean _csv;
 		//List<CompilationUnit> _files;
 		Map<String, TypeEntry> _types;
 		boolean _wildCardsFound;
@@ -304,12 +356,31 @@ public class JavaDependencyParser {
 		}
 	}
 	
+	public static void printUsage() {
+		System.out.println("Java Dependency Parser -- parse some java files and determine approximate dependencies");
+		System.out.println("");
+		System.out.println("run with java -jar java-dependencies.jar <options> (<file>|<dir>)+ ");
+		System.out.println("");
+		System.out.println("available <options>:");
+		System.out.println("  --simple     -- print dependencies in a vaguely human readable form");
+		System.out.println("  --json       -- print dependencies as JSON, for further processing");
+		System.out.println("  --cycles     -- detect cycles in the dependency graph and print them");
+		System.out.println("  --cyclescsv  -- detect cycles in the dependency graph and print them as csv");
+		System.out.println("  --csvheader  -- print csv header for the cyclescsv format");
+		System.out.println("  --project=.. -- give the project name to be used for the cyclescsv format");
+		
+		System.out.println("");
+	}
 	
 	public static void main(String[] args) {
 		
 		List<IHandler> handlers = new ArrayList<IHandler>();
 		
-		List<String> nonOptions = new ArrayList<>();
+		//List<String> nonOptions = new ArrayList<>();
+		List<File> files = new ArrayList<>();
+		List<File> dirs = new ArrayList<>();
+		
+		String name = null;
 		
 		if (0 < args.length) {
 			IHandler printer = null;
@@ -317,14 +388,39 @@ public class JavaDependencyParser {
 			for (String arg : args) {
 				if (arg.startsWith("--")) {
 					if ("--simple".equals(arg)) {
+						printUsage();
+						return;
+					} else if ("--simple".equals(arg)) {
 						printer = new PrinterSimple(System.out);
 					} else if ("--json".equals(arg)) {
 						printer = new PrinterJson(System.out);
 					} else if ("--cycles".equals(arg)) {
-						handlers.add(new CycleFinder());
+						handlers.add(new CycleFinder(false));
+					} else if ("--cyclescsv".equals(arg)) {
+						handlers.add(new CycleFinder(true));
+					} else if ("--csvheader".equals(arg)) {
+						System.out.println("name,cycles,classes_in_cycles,largest_cycle,hasWildcards,cycle_json");
+					} else if (arg.startsWith("--project=")) {
+						name = arg.substring("--project=".length());
+					} else {
+						System.out.println("unrecognized option: "+arg);
+						printUsage();
+						return;
 					}
+				} else if (arg.startsWith("-")) {
+					System.out.println("unrecognized option: "+arg);
+					printUsage();
+					return;
 				} else {
-					nonOptions.add(arg);
+					File file = new File(arg);
+					if (file.exists()) {
+						if (file.isDirectory()) {
+							dirs.add(file);
+						}
+						if (file.isFile()) {
+							files.add(file);
+						}
+					}
 				}
 			}
 			
@@ -332,26 +428,43 @@ public class JavaDependencyParser {
 				handlers.add(printer);
 			}
 
-			for (IHandler h : handlers) {
-				h.start();
-			}
-			
-			for (String arg : nonOptions) {
-				File file = new File(arg);
-				if (file.isDirectory()) {
-					FileWalker fw = new FileWalker(file, fn -> fn.getName().endsWith(".java"));
-					while (fw.hasNext()) {
-						//System.out.println(fw.next());
-						File ff = fw.next();
-						handleFile(ff, handlers, fw.hasNext());
+
+			if (!files.isEmpty()) {
+				String p = name;
+				if (null == p) {
+					p = files.get(0).getName();
+				}
+				for (IHandler h : handlers) {
+					h.start(p);
+				}
+				for (File file : files) {
+					if (file.isDirectory()) {
+					} else if (file.exists()) {
+						handleFile(file, handlers, false);
 					}
-				} else if (file.exists()) {
-					handleFile(file, handlers, false);
+				}
+				for (IHandler h : handlers) {
+					h.end(p);
 				}
 			}
-			for (IHandler h : handlers) {
-				h.end();
-			}			
+
+			for (File dir : dirs) {
+				String p = name;
+				if (null == p) {
+					p = dir.getName();
+				}
+				for (IHandler h : handlers) {
+					h.start(p);
+				}
+				FileWalker fw = new FileWalker(dir, fn -> fn.getName().endsWith(".java"));
+				while (fw.hasNext()) {
+					File ff = fw.next();
+					handleFile(ff, handlers, fw.hasNext());
+				}
+				for (IHandler h : handlers) {
+					h.end(p);
+				}
+			}
 		}
 
 	}

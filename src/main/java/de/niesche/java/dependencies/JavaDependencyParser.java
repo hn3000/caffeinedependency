@@ -175,7 +175,7 @@ public class JavaDependencyParser {
 	
 	private static class CycleFinder implements IHandler {
 		public CycleFinder() {
-			_files = new ArrayList<>();
+			//_files = new ArrayList<>();
 			_types = new HashMap<>();
 			_wildCardsFound = false;
 		}
@@ -186,7 +186,7 @@ public class JavaDependencyParser {
 		}
 		@Override
 		public void handleFile(String fn, CompilationUnit cu, boolean hasNext) {
-			_files.add(cu);
+			//_files.add(cu);
 			
 			Set<String> imports = new HashSet<>();
 			for (ImportDeclaration i : cu.getImports()) {
@@ -282,7 +282,7 @@ public class JavaDependencyParser {
 			return e.lowestReachable;
 		}
 		
-		List<CompilationUnit> _files;
+		//List<CompilationUnit> _files;
 		Map<String, TypeEntry> _types;
 		boolean _wildCardsFound;
 

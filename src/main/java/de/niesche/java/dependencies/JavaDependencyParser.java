@@ -190,10 +190,11 @@ public class JavaDependencyParser {
 			
 			Set<String> imports = new HashSet<>();
 			for (ImportDeclaration i : cu.getImports()) {
-				String imp = i.getNameAsString();
-				imports.add(imp);
-				if (imp.endsWith("*")) {
+				if (i.isAsterisk()) {
 					_wildCardsFound = true;
+				} else {
+					String imp = i.getNameAsString();
+					imports.add(imp);
 				}
 			}
 			
@@ -217,7 +218,7 @@ public class JavaDependencyParser {
 			int maxCycle = _cycles.stream().mapToInt(List::size).reduce(0, Integer::max);
 			int numInCycle = _cycles.stream().mapToInt(List::size).reduce(0, Integer::sum);
 			
-			System.out.println("found "+numInCycle+" types in "+_cycles.size()+" cycles (longest is "+maxCycle+") after looking at "+_types.size()+" types");
+			System.out.println("found "+numInCycle+" types in "+_cycles.size()+" strongly connected components (largest is "+maxCycle+") after looking at "+_types.size()+" types");
 			
 			for (List<TypeEntry> list : _cycles) {
 				System.out.println("[");

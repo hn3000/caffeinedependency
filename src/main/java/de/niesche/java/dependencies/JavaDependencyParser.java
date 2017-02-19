@@ -222,13 +222,14 @@ public class JavaDependencyParser {
 			int maxCycle = _cycles.stream().mapToInt(List::size).reduce(0, Integer::max);
 			int numInCycle = _cycles.stream().mapToInt(List::size).reduce(0, Integer::sum);
 			int numCycles = _cycles.size();
+			int numTypes = _types.size();
 
 			String json = cyclesAsJson();
 			if (_csv) {
 				json = json.replaceAll("\"", "\\\"");
-				System.out.println(project+","+numCycles+","+numInCycle+","+maxCycle+","+_wildCardsFound+",\""+json+"\"");
+				System.out.println(project+","+numCycles+","+numInCycle+","+maxCycle+","+numTypes+","+_wildCardsFound+",\""+json+"\"");
 			} else {
-				System.out.println(project+": found "+numInCycle+" types in "+numCycles+" strongly connected components (largest is "+maxCycle+") after looking at "+_types.size()+" types");
+				System.out.println(project+": found "+numInCycle+" types in "+numCycles+" strongly connected components (largest is "+maxCycle+") after looking at "+numTypes+" types");
 				System.out.println(json);
 				if (_wildCardsFound) {
 					System.out.println("Note: Found wildcard imports, result is a lower bound.");
@@ -399,7 +400,7 @@ public class JavaDependencyParser {
 					} else if ("--cyclescsv".equals(arg)) {
 						handlers.add(new CycleFinder(true));
 					} else if ("--csvheader".equals(arg)) {
-						System.out.println("name,cycles,classes_in_cycles,largest_cycle,hasWildcards,cycle_json");
+						System.out.println("name,cycles,classes_in_cycles,largest_cycle,num_types,has_wildcards,cycle_json");
 					} else if (arg.startsWith("--project=")) {
 						name = arg.substring("--project=".length());
 					} else {

@@ -240,6 +240,10 @@ public class JavaDependencyParser {
 			
 		}
 		
+		public void setMinCycleSize(int minCycle) {
+			_minCycle = minCycle;
+		}
+		
 		String cyclesAsJson() {
 			StringBuilder result = new StringBuilder();
 			String linesep = "";
@@ -327,7 +331,7 @@ public class JavaDependencyParser {
 					c.inStack = false;
 					thisCycle.add(c);
 				} while (c != e);
-				if (thisCycle.size() > 1) {
+				if (thisCycle.size() > _minCycle) {
 					this._cycles.add(thisCycle);
 				}
 			}
@@ -336,6 +340,7 @@ public class JavaDependencyParser {
 		}
 		
 		boolean _csv;
+		int _minCycle = 1;
 		//List<CompilationUnit> _files;
 		Map<String, TypeEntry> _types;
 		boolean _wildCardsFound;
@@ -401,6 +406,15 @@ public class JavaDependencyParser {
 						handlers.add(new CycleFinder(true));
 					} else if ("--csvheader".equals(arg)) {
 						System.out.println("name,cycles,classes_in_cycles,largest_cycle,num_types,has_wildcards,cycle_json");
+					} else if (arg.startsWith("--cyclesmin=")) {
+						int minCycle = Integer.parseInt(arg.substring("--cyclesmin=".length()), 10);
+						handlers.forEach(
+							x -> { 
+								if (x instanceof CycleFinder) { 
+									((CycleFinder)x).setMinCycleSize(minCycle); 
+								} 
+							}
+						);
 					} else if (arg.startsWith("--project=")) {
 						name = arg.substring("--project=".length());
 					} else {
